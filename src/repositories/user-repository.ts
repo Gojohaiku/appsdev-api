@@ -1,27 +1,60 @@
-import { db } from "@/prisma/db";
-import { SignupInput } from "@/schema/auth-schema";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { users } from "@/db/schema";
+import type { SignupInput } from "@/schema/auth-schema";
+
+// Return account details without exposing the stored password hash.
+const publicFields = {
+  id: users.id,
+  name: users.name,
+  email: users.email,
+  createdAt: users.createdAt,
+  role: users.role,
+  emailVerified: users.emailVerified,
+};
 
 export class UserRepository {
   async findById(id: string) {
-    return await db.orm.public.User
-      .select("id", "name", "email", "createdAt", "role", "emailVerified")
-      .first({ id });
+    const [user] = await db
+      .select(publicFields)
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+
+    return user;
   }
 
   async findByEmail(email: string) {
-    return await db.orm.public.User.where({ email }).first();
+    // Login needs the password hash to check the supplied password.
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    return user;
   }
 
   async create(data: SignupInput) {
-    return await db.orm.public.User
-      .select("id", "name", "email", "createdAt", "role", "emailVerified")
-      .create(data);
+    const [user] = await db
+      .insert(users)
+      .values(data)
+      .returning(publicFields);
+
+    return user;
   }
 
   async markEmailVerified(userId: string) {
-    return db.orm.public.User
-      .where({ id: userId })
-      .select("id", "email", "emailVerified")
-      .update({ emailVerified: new Date().toISOString() });
+    const [user] = await db
+      .update(users)
+      .set({ emailVerified: new Date().toISOString() })
+      .where(eq(users.id, userId))
+      .returning({
+        id: users.id,
+        email: users.email,
+        emailVerified: users.emailVerified,
+      });
+
+    return user;
   }
 }

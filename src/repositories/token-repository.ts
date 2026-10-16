@@ -1,4 +1,6 @@
-import { db } from "@/prisma/db";
+import { and, eq, gt, isNull } from "drizzle-orm";
+import { db } from "@/db";
+import { tokens } from "@/db/schema";
 
 type CreateTokenData = {
   userId: string;
@@ -7,32 +9,78 @@ type CreateTokenData = {
 };
 
 export class TokenRepository {
+  // Store the token so the API can track its expiration and usage.
   async createRefreshToken(data: CreateTokenData) {
-    return db.orm.public.Token.create({
-      userId: data.userId,
-      token: data.token,
-      expiresAt: data.expiresAt.toISOString(),
-      type: "REFRESH",
-    });
+    const expiresAt = data.expiresAt.toISOString();
+
+    const [token] = await db
+      .insert(tokens)
+      .values({
+        userId: data.userId,
+        token: data.token,
+        expiresAt: expiresAt,
+        type: "REFRESH",
+      })
+      .returning();
+
+    return token;
   }
 
+  // Only return a token that is unused, unrevoked, and not expired.
   async findActiveRefreshToken(token: string) {
-    return db.orm.public.Token
-      .where({ token, type: "REFRESH" })
-      .where((row) => row.consumedAt.isNull())
-      .where((row) => row.revokedAt.isNull())
-      .first();
+    const currentTime = new Date().toISOString();
+
+    const [activeToken] = await db
+      .select()
+      .from(tokens)
+      .where(
+        and(
+          eq(tokens.token, token),
+          eq(tokens.type, "REFRESH"),
+          isNull(tokens.consumedAt),
+          isNull(tokens.revokedAt),
+          gt(tokens.expiresAt, currentTime),
+        ),
+      )
+      .limit(1);
+
+    return activeToken;
   }
 
+  // Mark the old refresh token as used when the API rotates tokens.
   async consumeToken(id: string) {
-    return db.orm.public.Token
-      .where({ id })
-      .update({ consumedAt: new Date().toISOString() });
+    const consumedAt = new Date().toISOString();
+
+    const [token] = await db
+      .update(tokens)
+      .set({
+        consumedAt: consumedAt,
+      })
+      .where(
+        and(
+          eq(tokens.id, id),
+          isNull(tokens.consumedAt),
+          isNull(tokens.revokedAt),
+        ),
+      )
+      .returning();
+
+    // If no row was updated, the service must reject the refresh request.
+    return token;
   }
 
+  // Logout revokes the token so it cannot be used to refresh again.
   async revokeToken(id: string) {
-    return db.orm.public.Token
-      .where({ id })
-      .update({ revokedAt: new Date().toISOString() });
+    const revokedAt = new Date().toISOString();
+
+    const [token] = await db
+      .update(tokens)
+      .set({
+        revokedAt: revokedAt,
+      })
+      .where(eq(tokens.id, id))
+      .returning();
+
+    return token;
   }
 }

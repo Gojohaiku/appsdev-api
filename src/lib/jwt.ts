@@ -1,4 +1,5 @@
 import jwt, { SignOptions } from "jsonwebtoken";
+import { randomUUID } from "node:crypto";
 import { ENV } from "@/config/env";
 
 export type JwtPayload = { sub: string; role: string; type: "access" | "refresh" };
@@ -11,12 +12,12 @@ export enum TokenExpiry {
 
 export function signAccessToken(userId: string, role: string, duration: SignOptions["expiresIn"]) {
   const payload: JwtPayload = { sub: userId, role, type: "access" };
-  return jwt.sign(payload, jwtSecret, { expiresIn: duration });
+  return jwt.sign(payload, jwtSecret, { expiresIn: duration, jwtid: randomUUID() });
 }
 
 export function signRefreshToken(userId: string, role: string, duration: SignOptions["expiresIn"]) {
   const payload: JwtPayload = { sub: userId, role, type: "refresh" };
-  return jwt.sign(payload, jwtSecret, { expiresIn: duration });
+  return jwt.sign(payload, jwtSecret, { expiresIn: duration, jwtid: randomUUID() });
 }
 
 export function verifyAccessToken(token: string): JwtPayload | null {

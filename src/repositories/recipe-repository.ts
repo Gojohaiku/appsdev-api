@@ -1,25 +1,64 @@
-import { db } from "@/prisma/db";
+import { and, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { recipes } from "@/db/schema";
 import type { CreateRecipeInput, UpdateRecipeInput } from "@/schema/recipe-schema";
 
 export class RecipeRepository {
   async findAll(userId?: string) {
-    const recipes = db.orm.public.Recipe;
-    return userId ? recipes.where({ userId }).all() : recipes.all();
+    // An owner filter returns one user's recipes; omitting it lists all recipes.
+    return db.select().from(recipes).where(userId ? eq(recipes.userId, userId) : undefined);
   }
 
   async findById(id: string, userId?: string) {
-    return db.orm.public.Recipe.first(userId ? { id, userId } : { id });
+    const [recipe] = await db
+      .select()
+      .from(recipes)
+      .where(
+        and(
+          eq(recipes.id, id),
+          userId ? eq(recipes.userId, userId) : undefined,
+        ),
+      )
+      .limit(1);
+
+    return recipe;
   }
 
   async create(data: CreateRecipeInput, userId: string) {
-    return db.orm.public.Recipe.create({ ...data, userId });
+    const [recipe] = await db
+      .insert(recipes)
+      .values({ ...data, userId })
+      .returning();
+
+    return recipe;
   }
 
   async update(id: string, data: UpdateRecipeInput, userId?: string) {
-    return db.orm.public.Recipe.where(userId ? { id, userId } : { id }).update(data);
+    const [recipe] = await db
+      .update(recipes)
+      .set(data)
+      .where(
+        and(
+          eq(recipes.id, id),
+          userId ? eq(recipes.userId, userId) : undefined,
+        ),
+      )
+      .returning();
+
+    return recipe;
   }
 
   async delete(id: string, userId?: string) {
-    return db.orm.public.Recipe.where(userId ? { id, userId } : { id }).delete();
+    const [recipe] = await db
+      .delete(recipes)
+      .where(
+        and(
+          eq(recipes.id, id),
+          userId ? eq(recipes.userId, userId) : undefined,
+        ),
+      )
+      .returning();
+
+    return recipe;
   }
 }
