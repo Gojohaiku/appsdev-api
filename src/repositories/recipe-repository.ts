@@ -1,9 +1,20 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, getTableColumns } from "drizzle-orm";
 import { db } from "@/db";
-import { recipes } from "@/db/schema";
+import { recipes, users } from "@/db/schema";
 import type { CreateRecipeInput, UpdateRecipeInput } from "@/schema/recipe-schema";
 
 export class RecipeRepository {
+  // Admin list: include the owner's name without exposing private account fields.
+  async findAllWithOwners() {
+    return db
+      .select({
+        ...getTableColumns(recipes),
+        ownerName: users.name,
+      })
+      .from(recipes)
+      .innerJoin(users, eq(recipes.userId, users.id));
+  }
+
   async findAll(userId?: string) {
     // An owner filter returns one user's recipes; omitting it lists all recipes.
     return db.select().from(recipes).where(userId ? eq(recipes.userId, userId) : undefined);

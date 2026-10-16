@@ -5,7 +5,7 @@ export async function getAllRecipesService() {
 
   try {
     // Get all recipes
-    const recipes = await recipeRepository.findAll();
+    const recipes = await recipeRepository.findAllWithOwners();
     return { code: 200, status: "success", data: { recipes } };
   } catch (error) {
     console.error("getAllRecipesService Error", error);
